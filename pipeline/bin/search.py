@@ -7,10 +7,7 @@ import ratings, diagnostics, config
 import singlepulse.GBNCC_wrapper_make_spd as GBNCC_wrapper_make_spd
 import ffa_final
 from get_ffa_folding_command import get_ffa_folding_command
-try:
-    import pyfits
-except ImportError:
-    from astropy.io import fits as pyfits
+from astropy.io import fits
 
 checkpointdir = config.jobsdir
 basetmpdir    = config.basetmpdir
@@ -19,7 +16,7 @@ baseoutdir    = config.baseoutdir
 #-------------------------------------------------------------------
 # Tunable parameters for searching and folding
 # (you probably don't need to tune any of them)
-orig_N                = 1440000 # Number of samples to analyze (~118 s)
+orig_N                = 2160000 # Number of samples to analyze (~176 s)
 rfifind_chunk_time    = 25600 * 0.00008192  # ~2.1 sec
 singlepulse_threshold = 5.0  # threshold SNR for candidate determination
 singlepulse_plot_SNR  = 5.5  # threshold SNR for plotting
@@ -153,7 +150,7 @@ class obs_info:
         self.fits_filenm = fits_filenm
         self.basefilenm = fits_filenm[:fits_filenm.find(".fits")]
         self.dsbasefilenm = fits_filenm[:fits_filenm.rfind("_")]
-        fitshandle=pyfits.open(fits_filenm, ignore_missing_end=True)
+        fitshandle = fits.open(fits_filenm, ignore_missing_end=True)
         self.MJD = fitshandle[0].header['STT_IMJD']+fitshandle[0].header['STT_SMJD']/86400.0+fitshandle[0].header['STT_OFFS']/86400.0
         self.nchans = fitshandle[0].header['OBSNCHAN']
         self.ra_string = fitshandle[0].header['RA']
@@ -166,8 +163,6 @@ class obs_info:
         self.dt=fitshandle[1].header['TBIN']*1000000
         self.raw_T = self.raw_N * self.dt
         self.N = orig_N
-        if self.dt == 163.84:
-          self.N=self.N/2
         self.T = self.N * self.dt
         self.srcname=fitshandle[0].header['SRC_NAME']
         # Determine the average barycentric velocity of the observation
@@ -309,10 +304,7 @@ def main(fits_filenm, workdir, jobid, zaplist, ddplans):
         print "The observation is too short (%.2f s) to search."%job.raw_T
         sys.exit(1)
     job.total_time = time.time()
-    if job.dt == 163.84:
-      ddplans = ddplans[str(job.nchans)+"slow"]
-    else:
-      ddplans = ddplans[str(job.nchans)+"fast"]
+    ddplans = ddplans["GPS"]
     
     # Use the specified zaplist if provided.  Otherwise use whatever is in
     # this directory
@@ -341,7 +333,7 @@ def main(fits_filenm, workdir, jobid, zaplist, ddplans):
         os.makedirs(tmpdir)
     except: pass
 
-    print "\nBeginning GBNCC search of '%s'"%job.fits_filenm
+    print "\nBeginning GBT-GPS search of '%s'"%job.fits_filenm
     print "UTC time is:  %s"%(time.asctime(time.gmtime()))
 
     rfifindout=job.basefilenm+"_rfifind.out"
@@ -699,46 +691,11 @@ def main(fits_filenm, workdir, jobid, zaplist, ddplans):
 
 if __name__ == "__main__":
     # Create our de-dispersion plans
-    # All GBNCC data have 4096 channels, but the earliest data is sampled
-    # at 163.84us rather than 81.92 us...
-    ddplans = {'4096slow':[], '4096fast':[]}
-    if (0):
-        #
-        # If there is <=1GB of RAM per CPU core, the following are preferred
-        #
-        # For 4096slow chan data: lodm dmstep dms/call #calls #subs downsamp
-        ddplans['4096slow'].append(dedisp_plan(    0.0,0.02, 86,81,128, 1))
-        ddplans['4096slow'].append(dedisp_plan( 139.32,0.03,102,27,128, 2))
-        ddplans['4096slow'].append(dedisp_plan( 221.94,0.05,102,33,128, 4))
-        ddplans['4096slow'].append(dedisp_plan( 390.24,0.10,102,37,128, 8))
-        ddplans['4096slow'].append(dedisp_plan( 767.64,0.30, 92,41,128,16))
-        ddplans['4096slow'].append(dedisp_plan(1899.24,0.50,102,22,128, 32))
-        # For 4096fast chan data: lodm dmstep dms/call #calls #subs downsamp
-        ddplans['4096fast'].append(dedisp_plan(    0.0,0.01, 86,81,128, 1))
-        ddplans['4096fast'].append(dedisp_plan(  69.66,0.02, 86,33,128, 2))
-        ddplans['4096fast'].append(dedisp_plan( 126.42,0.03,102,29,128, 4))
-        ddplans['4096fast'].append(dedisp_plan( 215.16,0.05,102,33,128, 8))
-        ddplans['4096fast'].append(dedisp_plan( 383.46,0.10,102,38,128,16))
-        ddplans['4096fast'].append(dedisp_plan( 771.06,0.30, 92,41,128,32))
-        ddplans['4096fast'].append(dedisp_plan(1902.66,0.50,102,22,128,64))
-    else:
-        # If there is >2GB of RAM per CPU core, the following are preferred
-        #
-        # For 4096slow chan data: lodm dmstep dms/call #calls #subs downsamp
-        ddplans['4096slow'].append(dedisp_plan(    0.0,0.02,172,41,256, 1))
-        ddplans['4096slow'].append(dedisp_plan( 141.04,0.03,204,14,256, 2))
-        ddplans['4096slow'].append(dedisp_plan( 226.72,0.05,204,16,256, 4))
-        ddplans['4096slow'].append(dedisp_plan( 389.92,0.10,204,19,256, 8))
-        ddplans['4096slow'].append(dedisp_plan( 777.52,0.30,184,20,256,16))
-        ddplans['4096slow'].append(dedisp_plan(1881.52,0.50,204,11,256,32))
-        # For 4096fast chan data: lodm dmstep dms/call #calls #subs downsamp
-        ddplans['4096fast'].append(dedisp_plan(    0.0,0.01,172,41,256, 1))
-        ddplans['4096fast'].append(dedisp_plan(  70.52,0.02,172,16,256, 2))
-        ddplans['4096fast'].append(dedisp_plan( 125.56,0.03,204,15,256, 4))
-        ddplans['4096fast'].append(dedisp_plan( 217.36,0.05,204,17,256, 8))
-        ddplans['4096fast'].append(dedisp_plan( 390.76,0.10,204,19,256,16))
-        ddplans['4096fast'].append(dedisp_plan( 778.36,0.30,204,20,256,32))
-        ddplans['4096fast'].append(dedisp_plan(1882.36,0.50,204,11,256,64))
+    ddplans = {'GPS':[]}
+    ddplans['GPS'].append(dedisp_plan(   0.0, 0.1, 4896, 102, 48, 1))
+    ddplans['GPS'].append(dedisp_plan( 489.6, 0.3, 1728,  96, 18, 2))
+    ddplans['GPS'].append(dedisp_plan(1008.0, 0.5, 1326, 102, 15, 4))
+    ddplans['GPS'].append(dedisp_plan(1773.0, 1.0, 1326, 102, 13, 8))
 
     # Create argument parser
     parser = argparse.ArgumentParser(description="Search data from the "\
